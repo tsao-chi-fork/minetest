@@ -1,38 +1,26 @@
-FROM debian:stretch
+FROM alpine
 
-USER root
-RUN apt-get update -y && \
-	apt-get -y install build-essential libirrlicht-dev cmake libbz2-dev libpng-dev libjpeg-dev \
-		libsqlite3-dev libcurl4-gnutls-dev zlib1g-dev libgmp-dev libjsoncpp-dev git
+RUN apk add --no-cache git build-base irrlicht-dev cmake bzip2-dev libpng-dev jpeg-dev libxxf86vm-dev mesa-dev sqlite-dev libogg-dev libvorbis-dev openal-soft-dev curl-dev freetype-dev zlib-dev gmp-dev jsoncpp-dev && \
+  cd /root && \
+  git clone --depth=1 https://github.com/minetest/minetest.git ./minetest && \
+  git clone --depth=1 https://github.com/minetest/minetest_game.git ./minetest/games/minetest_game && \
+  rm -fr ./minetest/games/minetest_game/.git && \
+  cd ./minetest && \
+  cmake . \
+    -DCMAKE_INSTALL_PREFIX=/usr/local \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DBUILD_SERVER=TRUE \
+    -DBUILD_CLIENT=FALSE && \
+  make -j4 && \
+  make install DESTDIR=/root/out
 
-COPY . /usr/src/minetest
+FROM alpine
 
-RUN	mkdir -p /usr/src/minetest/cmakebuild && cd /usr/src/minetest/cmakebuild && \
-    	cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release -DRUN_IN_PLACE=FALSE \
-		-DBUILD_SERVER=TRUE \
-		-DBUILD_CLIENT=FALSE \
-		-DENABLE_SYSTEM_JSONCPP=1 \
-		.. && \
-		make -j2 && \
-		rm -Rf ../games/minetest_game && git clone --depth 1 https://github.com/minetest/minetest_game ../games/minetest_game && \
-		rm -Rf ../games/minetest_game/.git
-		make install
+COPY --from=0 /root/out/usr/local/share/minetest /usr/local/share/minetest
+COPY --from=0 /root/out/usr/local/bin/minetestserver /usr/local/bin/minetestserver
+COPY --from=0 /root/out/usr/local/share/doc/minetest/minetest.conf.example /etc/minetest/minetest.conf
 
-FROM debian:stretch
-
-USER root
-RUN groupadd minetest && useradd -m -g minetest -d /var/lib/minetest minetest && \
-    apt-get update -y && \
-    apt-get -y install libcurl3-gnutls libjsoncpp1 liblua5.1-0 libluajit-5.1-2 libpq5 libsqlite3-0 \
-        libstdc++6 zlib1g libc6 && \
-    apt-get clean && rm -rf /var/cache/apt/archives/* && \
-    rm -rf /var/lib/apt/lists/*
-
-WORKDIR /var/lib/minetest
-
-COPY --from=0 /usr/local/share/minetest /usr/local/share/minetest
-COPY --from=0 /usr/local/bin/minetestserver /usr/local/bin/minetestserver
-COPY --from=0 /usr/local/share/doc/minetest/minetest.conf.example /etc/minetest/minetest.conf
+RUN apk add --no-cache sqlite-libs curl gmp libstdc++ libgcc && adduser -D minetest
 
 USER minetest
 
